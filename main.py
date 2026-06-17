@@ -11,7 +11,6 @@ app = Flask(__name__)
 
 # Конфигурация
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen3-vl:2b"
 UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
@@ -292,6 +291,7 @@ def analyze():
 # Глобальная переменная для хранения настроек
 SKIP_OPENCV_CHECK = False
 ATTEMPTS = 3
+MODEL_NAME = "qwen3-vl:2b"  # Default model
 
 
 def main():
@@ -307,6 +307,9 @@ def main():
         "--port", type=int, default=5000, help="Port to listen on (default: 5000)"
     )
     parser.add_argument(
+        "--model", type=str, default="qwen3-vl:2b", help="Model name to use (default: qwen3-vl:2b)"
+    )
+    parser.add_argument(
         "--skip-opencv-check",
         action="store_true",
         help="Skip OpenCV face detection check",
@@ -317,13 +320,16 @@ def main():
 
     args = parser.parse_args()
 
-    # Устанавливаем глобальную переменную
+    # Устанавливаем глобальные переменные
     global SKIP_OPENCV_CHECK
     global ATTEMPTS
+    global MODEL_NAME
     SKIP_OPENCV_CHECK = args.skip_opencv_check
     ATTEMPTS = args.attempts
+    MODEL_NAME = args.model
 
     print(f"Starting Photo Checker Service on {args.host}:{args.port}")
+    print(f"Using model: {MODEL_NAME}")
     print(
         f"OpenCV face detection check: {'disabled' if SKIP_OPENCV_CHECK else 'enabled'}"
     )

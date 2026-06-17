@@ -47,11 +47,13 @@ python main.py
 Optional command line arguments:
 - `--host`: Host address to bind to (default: 127.0.0.1)
 - `--port`: Port to listen on (default: 5000)
+- `--model`: Model name to use (default: qwen3-vl:2b)
 - `--skip-opencv-check`: Skip OpenCV face detection check (default: disabled)
+- `--attempts`: Number of attempts to question ollama model (default: 3)
 
 Example:
 ```
-python main.py --host 0.0.0.0 --port 8080 --skip-opencv-check
+python main.py --host 0.0.0.0 --port 8080 --model=qwen3-vl:2b --skip-opencv-check
 ```
 
 When the server starts, it will show the address it's running on.
