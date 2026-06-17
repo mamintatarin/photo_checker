@@ -1,2 +1,5 @@
 test_imgs/*.jpg filter=lfs diff=lfs merge=lfs -text
 test_imgs/*.png filter=lfs diff=lfs merge=lfs -text
+test_imgs/test_image.jpg filter=lfs diff=lfs merge=lfs -text
+test_imgs/test_image2.jpg filter=lfs diff=lfs merge=lfs -text
+test_imgs/test_image3.jpg filter=lfs diff=lfs merge=lfs -text
