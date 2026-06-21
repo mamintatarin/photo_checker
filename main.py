@@ -267,7 +267,16 @@ def analyze():
 
         # Отправляем изображение и текст в Ollama
         result = query_ollama(filepath, text_description, attempts=ATTEMPTS)
-
+        if not result:
+            return jsonify(
+                    {
+                        "success": False,
+                        "message": "no llm answer",
+                        "match": False,
+                        "appearance_score": 0,
+                        "single_clear_person": False,
+                    }
+                )
         # Возвращаем результат
         return jsonify(
             {
