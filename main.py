@@ -4,8 +4,15 @@ import argparse
 import json
 import cv2
 import requests
+import pickle
+import numpy as np
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
+import insightface
+from insightface.app import FaceAnalysis
+
+# Импортируем утилиты для работы с лицами
+from face_utils import extract_face_embedding
 
 app = Flask(__name__)
 
@@ -15,6 +22,10 @@ UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+# Глобальные переменные для модели классификатора
+classifier_model = None
+face_analysis = None
 
 # Создаем папку для загрузки, если она не существует
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -69,6 +80,27 @@ def detect_face_opencv(image_path):
         False,
         f"No faces or people detected (faces: {faces_count}, people: {people_count})",
     )
+
+
+def classify_image(filepath):
+    """
+    Классификация изображения с использованием обученной модели
+    """
+    global classifier_model
+    
+    # Извлекаем вектор лица
+    embedding = extract_face_embedding(filepath)
+    
+    if embedding is None:
+        # Если лицо не найдено, возвращаем False
+        return False
+    
+    # Делаем предсказание
+    embedding = embedding.reshape(1, -1)  # Преобразуем в формат (1, n_features)
+    prediction = classifier_model.predict(embedding)
+    
+    # Возвращаем результат как boolean
+    return bool(prediction[0])
 
 
 def check_resp_str(resp: str) -> None | dict:
@@ -184,21 +216,24 @@ def query_ollama(image_path, text_description, attempts: int = 3) -> dict | None
 @app.route("/")
 def index():
     """Отображает веб-интерфейс для загрузки изображения и ввода текста"""
-    template = """
+    classifier_loaded = classifier_model is not None
+    disabled_attr = "disabled" if classifier_loaded else "required"
+    
+    template = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <title>Photo Checker</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .container { max-width: 600px; margin: 0 auto; }
-            .form-group { margin-bottom: 20px; }
-            label { display: block; margin-bottom: 5px; font-weight: bold; }
-            input[type="file"], textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
-            textarea { height: 100px; resize: vertical; }
-            button { background-color: #4CAF50; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; }
-            button:hover { background-color: #45a049; }
-            .result { margin-top: 20px; padding: 15px; background-color: #f0f0f0; border-radius: 4px; }
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .container {{ max-width: 600px; margin: 0 auto; }}
+            .form-group {{ margin-bottom: 20px; }}
+            label {{ display: block; margin-bottom: 5px; font-weight: bold; }}
+            input[type="file"], textarea {{ width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }}
+            textarea {{ height: 100px; resize: vertical; }}
+            button {{ background-color: #4CAF50; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; }}
+            button:hover {{ background-color: #45a049; }}
+            .result {{ margin-top: 20px; padding: 15px; background-color: #f0f0f0; border-radius: 4px; }}
         </style>
     </head>
     <body>
@@ -211,7 +246,7 @@ def index():
                 </div>
                 <div class="form-group">
                     <label for="description">Описание человека на фото:</label>
-                    <textarea id="description" name="description" placeholder="Введите описание человека на фото..." required></textarea>
+                    <textarea id="description" name="description" placeholder="Введите описание человека на фото..." {disabled_attr}></textarea>
                 </div>
                 <button type="submit">Анализировать</button>
             </form>
@@ -247,47 +282,79 @@ def analyze():
         # Получаем текстовое описание
         text_description = request.form.get("description", "")
 
-        if not text_description:
-            return jsonify({"error": "Description is required"}), 400
+        # Если загружена модель классификатора, используем её вместо Ollama
+        if classifier_model is not None:
+            # Проверяем изображение с помощью OpenCV, если не указан параметр пропуска
+            if not SKIP_OPENCV_CHECK:
+                face_detected, face_msg = detect_face_opencv(filepath)
 
-        # Проверяем изображение с помощью OpenCV, если не указан параметр пропуска
-        if not SKIP_OPENCV_CHECK:
-            face_detected, face_msg = detect_face_opencv(filepath)
+                if not face_detected:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "message": face_msg,
+                            "match": False,
+                            "appearance_score": 0,
+                            "single_clear_person": False,
+                        }
+                    )
 
-            if not face_detected:
-                return jsonify(
-                    {
-                        "success": False,
-                        "message": face_msg,
-                        "match": False,
-                        "appearance_score": 0,
-                        "single_clear_person": False,
-                    }
-                )
-
-        # Отправляем изображение и текст в Ollama
-        result = query_ollama(filepath, text_description, attempts=ATTEMPTS)
-        if not result:
+            # Для классификатора текстовое описание не используется
+            match_result = classify_image(filepath)
+            
+            # Возвращаем результат классификации
             return jsonify(
-                    {
-                        "success": False,
-                        "message": "no llm answer",
-                        "match": False,
-                        "appearance_score": 0,
-                        "single_clear_person": False,
-                    }
-                )
-        # Возвращаем результат
-        return jsonify(
-            {
-                "success": True,
-                "message": "Analysis completed successfully",
-                "match": result["match"],
-                "appearance_score": result["appearance_score"],
-                "single_clear_person": result["single_clear_person"],
-                "gender": result["gender"],
-            }
-        )
+                {
+                    "success": True,
+                    "message": "Analysis completed using classifier model",
+                    "match": match_result,
+                    "appearance_score": None,
+                    "single_clear_person": None,
+                    "gender": None,
+                }
+            )
+        else:
+            if not text_description:
+                return jsonify({"error": "Description is required"}), 400
+
+            # Проверяем изображение с помощью OpenCV, если не указан параметр пропуска
+            if not SKIP_OPENCV_CHECK:
+                face_detected, face_msg = detect_face_opencv(filepath)
+
+                if not face_detected:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "message": face_msg,
+                            "match": False,
+                            "appearance_score": 0,
+                            "single_clear_person": False,
+                        }
+                    )
+
+            # Отправляем изображение и текст в Ollama
+            result = query_ollama(filepath, text_description, attempts=ATTEMPTS)
+            if not result:
+                return jsonify(
+                        {
+                            "success": False,
+                            "message": "no llm answer",
+                            "match": False,
+                            "appearance_score": 0,
+                            "single_clear_person": False,
+                        }
+                    )
+            # Возвращаем результат
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "Analysis completed successfully",
+                    "match": result["match"],
+                    "appearance_score": result["appearance_score"],
+                    "single_clear_person": result["single_clear_person"],
+                    "gender": result["gender"],
+                }
+            )
 
     except requests.exceptions.RequestException as e:
         return jsonify({"error": str(e)}), 500
@@ -319,6 +386,9 @@ def main():
         "--model", type=str, default="qwen3-vl:2b", help="Model name to use (default: qwen3-vl:2b)"
     )
     parser.add_argument(
+        "--classifier-model", type=str, help="Path to the trained classifier model"
+    )
+    parser.add_argument(
         "--skip-opencv-check",
         action="store_true",
         help="Skip OpenCV face detection check",
@@ -333,12 +403,23 @@ def main():
     global SKIP_OPENCV_CHECK
     global ATTEMPTS
     global MODEL_NAME
+    global classifier_model
     SKIP_OPENCV_CHECK = args.skip_opencv_check
     ATTEMPTS = args.attempts
     MODEL_NAME = args.model
+    
+    # Загружаем модель классификатора, если указан путь
+    if args.classifier_model:
+        with open(args.classifier_model, 'rb') as f:
+            classifier_model = pickle.load(f)
+        print(f"Loaded classifier model from: {args.classifier_model}")
 
     print(f"Starting Photo Checker Service on {args.host}:{args.port}")
     print(f"Using model: {MODEL_NAME}")
+    if classifier_model:
+        print("Using classifier model for face matching")
+    else:
+        print("Using Ollama for face matching")
     print(
         f"OpenCV face detection check: {'disabled' if SKIP_OPENCV_CHECK else 'enabled'}"
     )

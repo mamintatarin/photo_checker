@@ -36,6 +36,39 @@ pip install -r requirements.txt
 
 Supported Python versions: 3.8 and higher
 
+Required packages are listed in requirements.txt:
+- flask==2.3.3
+- opencv-python==4.10.0.84
+- requests==2.31.0
+- insightface==0.7.3
+- scikit-learn==1.5.0
+- onnxruntime==1.18.0
+
+
+## Training
+
+To train a custom binary classifier using a dataset, use the training script:
+
+```
+python train_classifier.py <dataset_path> --output-model <model_path>
+```
+
+Where:
+- `<dataset_path>`: Path to the dataset folder containing 'positive' and 'negative' subfolders
+- `<model_path>`: Path where the trained model will be saved (default: face_classifier.pkl)
+
+The dataset should have the following structure:
+```
+dataset/
+├── positive/
+│   ├── img1.jpg
+│   ├── img2.png
+│   └── ...
+└── negative/
+    ├── img1.jpg
+    ├── img2.png
+    └── ...
+```
 
 ## Run
 
@@ -47,22 +80,32 @@ python main.py
 Optional command line arguments:
 - `--host`: Host address to bind to (default: 127.0.0.1)
 - `--port`: Port to listen on (default: 5000)
-- `--model`: Model name to use (default: qwen3-vl:2b)
+- `--model`: Ollama model name to use (default: qwen3-vl:2b)
+- `--classifier-model`: Path to the trained classifier model (optional)
 - `--skip-opencv-check`: Skip OpenCV face detection check (default: disabled)
 - `--attempts`: Number of attempts to question ollama model (default: 3)
 
 Example:
 ```
-python main.py --host 0.0.0.0 --port 8080 --model=qwen3-vl:2b --skip-opencv-check
+python main.py --host 0.0.0.0 --port 8080 --classifier-model face_classifier.pkl
 ```
 
 When the server starts, it will show the address it's running on.
 By default, it runs on http://127.0.0.1:5000
 
+If a classifier model is specified, the system will use it for face matching instead of Ollama.
+In this case, the text description is ignored, and the response will have:
+- `match`: Boolean result of classification
+- `appearance_score`: null
+- `single_clear_person`: null
+- `gender`: null
+
+If no classifier model is specified, the system will use Ollama for analysis as before.
+
 The OpenCV check verifies that there is at least one face and at least one person
 detected on the image using Haar cascade for faces and HOG descriptor for people.
 If the check is enabled (default), the image must pass both detections before being
-sent to the Ollama model.
+processed.
 
 ## Test
 

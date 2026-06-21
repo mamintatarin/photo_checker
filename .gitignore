@@ -220,3 +220,7 @@ __marimo__/
 
 .qwen
 .qwen/*
+test_imgs/*
+*.pkl
+*/positive/*
+*/negative/*
