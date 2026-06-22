@@ -11,12 +11,12 @@ def get_face_analysis_instance(providers=None):
     if providers is None:
         providers = ['CPUExecutionProvider']
     
-    face_analysis = FaceAnalysis(name='buffalo_l', providers=providers)
+    face_analysis = FaceAnalysis(name='buffalo_l', providers=providers, root='../.insightface')
     face_analysis.prepare(ctx_id=0, det_size=(640, 640))
     return face_analysis
 
 
-def extract_face_embedding(image_path, face_analysis=None):
+def extract_face_embedding(image_path: Path, face_analysis=None):
     """
     Извлечение вектора лица из изображения с помощью InsightFace
     """
@@ -37,7 +37,7 @@ def extract_face_embedding(image_path, face_analysis=None):
     return faces[0].embedding
 
 
-def extract_face_embeddings(image_path, face_analysis=None):
+def extract_face_embeddings(image_path: Path, face_analysis=None):
     """
     Извлечение векторов всех лиц из изображения с помощью InsightFace
     """
