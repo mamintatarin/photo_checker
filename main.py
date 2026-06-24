@@ -87,13 +87,14 @@ def classify_image(filepath):
     Классификация изображения с использованием обученной модели
     """
     global classifier_model
+    if classifier_model is None:
+        raise ValueError('Классификатор не создан')
     
     # Извлекаем вектор лица
     embedding = extract_face_embedding(filepath)
-    
     if embedding is None:
         # Если лицо не найдено, возвращаем False
-        return False
+        raise ValueError('No face found')
     
     # Делаем предсказание
     embedding = embedding.reshape(1, -1)  # Преобразуем в формат (1, n_features)
@@ -300,7 +301,13 @@ def analyze():
                     )
 
             # Для классификатора текстовое описание не используется
-            match_result = classify_image(filepath)
+            try:
+                match_result = classify_image(filepath)
+            except ValueError as e:
+                if str(e)=='No face found':
+                    match_result = None
+                else:
+                    raise e
             
             # Возвращаем результат классификации
             return jsonify(
@@ -309,7 +316,7 @@ def analyze():
                     "message": "Analysis completed using classifier model",
                     "match": match_result,
                     "appearance_score": None,
-                    "single_clear_person": None,
+                    "single_clear_person": None if match_result is not None else False,
                     "gender": None,
                 }
             )
